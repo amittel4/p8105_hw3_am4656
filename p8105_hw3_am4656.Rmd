@@ -10,11 +10,16 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(p8105.datasets)
 library(viridis)
+library(lubridate)
 data("instacart")
 
 instacart =
   instacart %>%
   as_tibble(instacart)
+
+ny_noaa =
+  ny_noaa %>% 
+  as_tibble(ny_noaa)
 ```
 
 # Problem 1
@@ -85,7 +90,7 @@ accel_data = read.csv(file = "./accel_data.csv") %>%
   mutate(minute_of_day = as.numeric(minute_of_day))
 ```
 
-After loading and cleaning the accel_data file, the resultant dataset has **`r nrow(accel_data)` rows** and **`r ncol(accel_data)`** columns. The dataset is organized such that accelerometer data (`activity_count`) is listed for 35 days by day of week, weekend day status, and chronological minute of day.
+After loading and cleaning the accel_data file, the resultant dataset has **`r nrow(accel_data)` rows** and **`r ncol(accel_data)`** columns. The dataset is organized such that accelerometer data ("activity_count") is listed for 35 days by day of week, weekend day status, and chronological minute of day.
 
 ```{r, aggregating across minutes to create a total activity variable for each day and creating a table showing these total, message = FALSE, echo = FALSE}
 accel_data %>%
@@ -93,11 +98,12 @@ accel_data %>%
   summarize(total_activity_count = sum(activity_count)) %>%
   knitr::kable(digits = 0)
 ```
+**Table 4**
 
 The mean activity count over the observed period is `r accel_data %>% pull(activity_count) %>% mean`. It looks like there may be more substantial variation in activity between weekend days versus non weekend days. Some weekends appear to have very low activity while others have high activity.
 
 Figure 1 below shows 24-hour accelerometer data over the course of each day of the week.
-```{r}
+```{r, echo = FALSE, message = FALSE}
 accel_data %>%
   mutate(day = forcats::fct_relevel(day, c("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"))) %>%
   ggplot(aes(x = (minute_of_day/60), y = activity_count, color = day)) +
@@ -111,3 +117,65 @@ accel_data %>%
  theme_minimal()
 ```
 From this figure, we can see that the patient's activity tends to increase after 5 a.m. and stay moderately high until about 8 p.m., when it then sharply drops off. On Fridays, there is a large amount of activity late in the evening from approximately 8 - 10 p.m. On Sundays there is a large amount of activity mid-day, from approximately 10 a.m. - 12 p.m.
+
+
+## Problem 3
+
+This problem works with ny_noaa data, which is large, including **`r nrow(ny_noaa)` rows** and **`r ncol(ny_noaa)`** columns. The data is organized by location, data, precipitation value, whether it snowed, snow depth, and maximum and minumum temperature. It is difficult to determine how temperature, precipitation, and snowfall are recorded as their units do not obviously track with standard U.S. estimates. For example, station USC00308600 is recorded with a maximum temperature value of 278 and a minimum temperature value of 189, which does not realistically link to Fahrenheit, Celsius, or Kelvin in an obvious manner. For simplicity, this temperature data is assumed to be 10-fold increases of plausible actual Celsius data. Likewise, precipitation, snowfall, and snow depth are assumed to be 100-fold increases of plausible inches of actual rainfall, snowfall, and snow depth.
+
+```{r, cleaning data, echo = FALSE, message = FALSE}
+ny_noaa_clean =
+  ny_noaa %>% 
+  mutate(year = year(date), month = month(date), day = day(date)) %>%
+  mutate(tmax = as.numeric(tmax)) %>%
+  mutate(tmin = as.numeric(tmin)) %>%
+  mutate(
+    tmax = tmax/10,
+    tmin = tmin/10,
+    prcp = prcp/100,
+    snow = snow/100,
+    snwd = snwd/100)
+```
+
+There is a fair bit of missing data in this dataset. The table below displays the total number of missing variables in each column:
+```{r, echo = FALSE}
+ny_noaa_clean %>% 
+  summarize_all(~ sum(is.na(.))) %>%
+  knitr::kable()
+```
+**Table 5**
+
+Using this histogram, we can see that the most commonly observed value is "0". This is likely because snow only falls occasionally during cold months in a short period of the year.
+```{r, echo = FALSE, message = FALSE}
+ny_noaa_clean %>%
+  ggplot(aes(x = snow)) +
+  geom_histogram(bins = 5) +
+  labs(
+    title = "Figure 2. Histogram of Snow Variable"
+  ) +
+  theme_minimal()
+```
+
+There are thousands of individual weather recording stations. We can display average maximum temperature in January compared to July in each station across years.
+```{r, echo = FALSE, message = FALSE}
+ny_noaa_clean %>%
+  group_by(id, year, month) %>%
+  filter(month == 1 | month == 7) %>%
+  drop_na(tmax) %>%
+  summarize(
+    mean_tmax = mean(tmax)) %>%
+  ggplot(aes(x = year, y = mean_tmax, color = id)) +
+  geom_point(alpha = 0.8) + 
+  facet_grid(. ~ month) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  scale_color_viridis(discrete = TRUE) +
+  labs(
+    Title = "Figure 3. Average Maximum Temperature in January verus July in Weather Stations in NY, by Year",
+    y = "Average Maximum Temperature",
+    x = "Year",
+    caption = "January is month 1. July is month 7"
+  )
+```
+
+From this plot, it is obvious that January is much colder than July. There do appear to be some outlier years, such as 1988 when July was relatively cool in one station.
