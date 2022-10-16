@@ -9,6 +9,7 @@ output: github_document
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(p8105.datasets)
+library(viridis)
 data("instacart")
 
 instacart =
@@ -20,7 +21,7 @@ instacart =
 
 * The instacart dataset includes **`r nrow(instacart)` rows** and **`r ncol(instacart)` columns**.
 * There are **`r instacart %>% select(user_id) %>% distinct %>% count` distinct users** who have ordered a total of **`r instacart %>% select(order_id) %>% count` orders** among **`r instacart %>% select(product_id) %>% distinct %>% count` distinct products**.
-* Key variables include: order_id, product_id, user_id, order_nmber, order_hour_of_day, days_since_prior_orer, aisle_id, and department_id.
+* Key variables include: order_id, product_id, user_id, order_number, order_hour_of_day, days_since_prior_orer, aisle_id, and department_id.
 * There are **`r nrow(instacart %>% count(aisle_id))` aisles**.
 * In Table 1 below we can see that the most items are ordered from Aisle 83, with a total of 150,609 items ordered.
 ```{r Table 1, echo = FALSE}
@@ -71,3 +72,42 @@ instacart %>%
 **Table 3**
 
 ## Problem 2
+
+```{r, loading and initial cleaning of data, echo = FALSE, message = FALSE}
+accel_data = read.csv(file = "./accel_data.csv") %>%
+  janitor::clean_names() %>%
+  pivot_longer(
+    activity_1:activity_1440,
+    names_to = "minute_of_day",
+    values_to = "activity_count") %>%
+  mutate(weekend = ifelse(day %in% c("Saturday","Sunday"),1,0)) %>%
+  mutate(minute_of_day = str_replace(minute_of_day,"activity_","")) %>%
+  mutate(minute_of_day = as.numeric(minute_of_day))
+```
+
+After loading and cleaning the accel_data file, the resultant dataset has **`r nrow(accel_data)` rows** and **`r ncol(accel_data)`** columns. The dataset is organized such that accelerometer data (`activity_count`) is listed for 35 days by day of week, weekend day status, and chronological minute of day.
+
+```{r, aggregating across minutes to create a total activity variable for each day and creating a table showing these total, message = FALSE, echo = FALSE}
+accel_data %>%
+  group_by(day_id, weekend) %>%
+  summarize(total_activity_count = sum(activity_count)) %>%
+  knitr::kable(digits = 0)
+```
+
+The mean activity count over the observed period is `r accel_data %>% pull(activity_count) %>% mean`. It looks like there may be more substantial variation in activity between weekend days versus non weekend days. Some weekends appear to have very low activity while others have high activity.
+
+Figure 1 below shows 24-hour accelerometer data over the course of each day of the week.
+```{r}
+accel_data %>%
+  mutate(day = forcats::fct_relevel(day, c("Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"))) %>%
+  ggplot(aes(x = (minute_of_day/60), y = activity_count, color = day)) +
+  geom_smooth(se = FALSE) +
+  labs(
+    title = "Figure 1. Activity Count by Hour of Day",
+    x = "Hour of Day",
+    y = "Activity Count",
+    caption = "35 day observation"
+  ) +
+ theme_minimal()
+```
+From this figure, we can see that the patient's activity tends to increase after 5 a.m. and stay moderately high until about 8 p.m., when it then sharply drops off. On Fridays, there is a large amount of activity late in the evening from approximately 8 - 10 p.m. On Sundays there is a large amount of activity mid-day, from approximately 10 a.m. - 12 p.m.
