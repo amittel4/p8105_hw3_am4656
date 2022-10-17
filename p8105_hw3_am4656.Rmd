@@ -11,6 +11,7 @@ library(tidyverse)
 library(p8105.datasets)
 library(viridis)
 library(lubridate)
+library(patchwork)
 data("instacart")
 
 instacart =
@@ -123,6 +124,8 @@ From this figure, we can see that the patient's activity tends to increase after
 
 This problem works with ny_noaa data, which is large, including **`r nrow(ny_noaa)` rows** and **`r ncol(ny_noaa)`** columns. The data is organized by location, data, precipitation value, whether it snowed, snow depth, and maximum and minumum temperature. It is difficult to determine how temperature, precipitation, and snowfall are recorded as their units do not obviously track with standard U.S. estimates. For example, station USC00308600 is recorded with a maximum temperature value of 278 and a minimum temperature value of 189, which does not realistically link to Fahrenheit, Celsius, or Kelvin in an obvious manner. For simplicity, this temperature data is assumed to be 10-fold increases of plausible actual Celsius data. Likewise, precipitation, snowfall, and snow depth are assumed to be 100-fold increases of plausible inches of actual rainfall, snowfall, and snow depth.
 
+Of note, this approach affects the histogram count of yearly snowfalls, as below.
+
 ```{r, cleaning data, echo = FALSE, message = FALSE}
 ny_noaa_clean =
   ny_noaa %>% 
@@ -132,13 +135,13 @@ ny_noaa_clean =
   mutate(
     tmax = tmax/10,
     tmin = tmin/10,
-    prcp = prcp/100,
-    snow = snow/100,
+    prcp = prcp/10,
+    snow = snow/10,
     snwd = snwd/100)
 ```
 
 There is a fair bit of missing data in this dataset. The table below displays the total number of missing variables in each column:
-```{r, echo = FALSE}
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
 ny_noaa_clean %>% 
   summarize_all(~ sum(is.na(.))) %>%
   knitr::kable()
@@ -179,3 +182,44 @@ ny_noaa_clean %>%
 ```
 
 From this plot, it is obvious that January is much colder than July. There do appear to be some outlier years, such as 1988 when July was relatively cool in one station.
+
+There are multiple ways to interpret the desire to plot tmax vs tmin in the full dataset. One approach might be to compare the maximum versus minimum temperature ever recorded at each site. We can also plot the total snowfalls documented in aggregate across all sites by year.
+```{r temperature and snowfall plots, echo = FALSE, message = FALSE}
+max_min_plot = 
+ny_noaa_clean %>%
+  select(id, tmax, tmin) %>%
+  drop_na(tmax, tmin) %>%
+  group_by(id) %>%
+  summarize(
+    max_temp = max(tmax),
+    min_temp = min(tmin)) %>%
+  pivot_longer(
+    max_temp:min_temp,
+    names_to = "observation",
+    values_to = "temperature") %>%
+  ggplot(aes(x = id, y = temperature, color = id)) +
+  geom_point(size = 1) +
+  theme(legend.position = "none") +
+  labs(
+    x = "Temperature Observation Site",
+    y = "Maximum and Minimum Temperature Ever Recorded"
+  )
+
+snowfall_plot = 
+ny_noaa_clean %>% 
+  group_by(id,year,snow) %>%
+  drop_na(snow) %>%
+  filter(snow %in% (1:99)) %>%
+  ggplot(aes(x = year)) +
+  geom_histogram() +
+  theme_minimal() +
+  labs(
+    title = "Snowfall 1 - 99 count per year, 1981 - 2010",
+    x = "Year",
+    y = "Count",
+    caption = "Aggregated for all sites"
+  )
+
+max_min_plot + labs(title = "Figure 4.") + snowfall_plot
+```
+**As above, these counts are based on the assumption that the data in the ny_noaa dataset are 100-fold increases of true snowfall inches.**
